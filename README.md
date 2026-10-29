@@ -1,0 +1,34 @@
+⚡ Multi-CPU Transformer Control, Telemetry & Command SystemAn enterprise-grade, distributed hardware and software ecosystem designed for high-power utility transformer monitoring, automated dual-stage cooling control, real-time power analytics, and multi-node cluster diagnostics.The ecosystem consists of ESP32-S3 industrial firmware controllers communicating over Ethernet and UART, backed by a Python Tkinter Desktop GUI Test Center & Server Daemon.🏗 System Architecture & Topology                  +-----------------------------------+
+                  |     MAX31855 Thermocouple Node    |
+                  |  (Secondary ESP32 - Sub-System)   |
+                  +-----------------+-----------------+
+                                    |
+                               UART | <FRAME>
+                                    v
++-----------------------------------+-----------------------------------+
+|               Main Transformer Controller (ESP32-S3)                  |
+| --------------------------------------------------------------------- |
+| • Dual Pressure Sensors (Internal ADC + ADS1115 I2C)                  |
+| • 3-Phase AC Voltage & RMS Current Monitoring (BURDEN CT / Div)       |
+| • SPI Thermocouples (Oil, Winding, Tank Surface)                      |
+| • DS3231 RTC + EEPROM Non-Volatile Memory                             |
+| • Stage A & Stage B Dual Cooling Relay Driver                         |
+| • MicroSD Card Datalogger (Multi-CSV Format & Web Viewer)            |
+| • AsyncUDP Telemetry Streamer & Time Synchronization Protocol         |
++---------------+-----------------------------------+-------------------+
+                |                                   |
+    UDP Stream  | Port 5000 / 1234      HTTP Web    | Port 80
+   & Time Sync  | Port 5007               Dashboard |
+                v                                   v
++---------------+-----------------------------------+-------------------+
+|      Kodion Energy - Multi-CPU Command & Telemetry Test Center         |
+| --------------------------------------------------------------------- |
+| • Desktop GUI App (Python / Tkinter / PySerial / Scapy)               |
+| • UDP Telemetry Server Daemon (Aggregates Up To 5 Transformer Units)  |
+| • UDP Time Synchronization Server (Responds to AA 01 Requests)        |
+| • Real-Time Packet Sniffer, Dissector & Hex Inspector                 |
+| • Live Serial Terminal & WebServer Inspector                          |
++-----------------------------------------------------------------------+
+🌟 Key Features📡 Main ESP32-S3 ControllerMulti-Sensor Telemetry Acquisition:Temperatures: SPI Thermocouple reading for Oil, Winding, and Tank surface temperatures.Pressures: Dual discharge pressure acquisition (0–100 PSI) using built-in ADC and ADS1115 via I2C.Electrical Analytics: 3-phase AC voltage sensing and RMS current sampling ($CT = 3000:5$) with power calculations (Real $\text{kW}$, Reactive $\text{kVAR}$, Apparent $\text{kVA}$, Power Factor).Automated Dual-Stage Cooling Logic:Hysteresis-driven, multi-temperature stage control (Stage A / Stage B Relays).Safe-Mode fallback mechanism triggering forced dual-stage cooling upon critical sensor loss or over-temperature faults.Network & Web Interface:Static IP W5500 Ethernet interface.Embedded Web Dashboard featuring Short Mode (OTA firmware flash) and Full Mode (Real-time telemetry, relay overrides, timer configurations, and in-browser CSV log viewer).Storage & Synchronized Protocol:MicroSD logging with user-configurable sampling rates (1s to 24h) persisting across EEPROM.UDP Data Streaming to FPGA/PC Server at 2 Hz ($64\text{-byte}$ packed payload with CRC32 verification).Auto Time Synchronization Protocol over UDP with server failover.🌡 Secondary Ambient Temperature Sub-SystemDedicated ESP32 module acquiring ambient thermal readings via MAX31855 SPI thermocouple.Transmits framed, error-checked data packets (<VALUE>) to the Main Controller via non-blocking Hardware UART.🖥 Python Multi-CPU Test Center & Server DaemonCluster Management: Simultaneously monitors and manages up to 5 transformer CPU units.Integrated UDP Server Daemons:Port 5000: Decodes 64-byte binary telemetry streams in real time.Port 5007: Responds to hardware time-sync queries (0xAA 0x01).Packet Inspector & Sniffer: Raw payload inspection supporting HEX, ASCII, Decimal, Binary, and Base64 formatting.Full Control Center: Remote reboot trigger (0x000001), manual relay overrides, compressor timer updates, and power factor adjustment.📂 Repository File StructureFileDescriptiontraxcode_18.inoMain ESP32-S3 Firmware (Ethernet, WebServer, Sensor Acquisition, Power Metrics, SD Logging, UDP Streaming).cpu2_extension.inoSecondary ESP32 Firmware (MAX31855 Thermocouple Reader & UART Streamer).main.pyCross-platform Desktop GUI Test Center, UDP Daemon, Serial Terminal & Packet Sniffer.🔌 Hardware Configuration & PinoutMain Controller (ESP32-S3)W5500 Ethernet SPI: SCK: 12 | MISO: 13 | MOSI: 11 | CS: 21MicroSD Card: CS: 48 | Detect: 47SPI Thermocouples: Tank CS: 3 | Winding CS: 10 | Oil CS: 9I2C Bus (ADS1115 & DS3231): SDA: 35 | SCL: 36AC Voltage Inputs: Phase A: 6 | Phase B: 7 | Phase C: 8AC Current Inputs: Phase 1: 2 | Phase 2: 5 | Phase 3: 4UART Inter-Module Link: RX: 42 | TX: 41Relay Outputs: Stage A: 39 | Stage B: 40📊 Binary Network Telemetry Packet Format (64-Byte)Data packets streamed over UDP Port 5000 follow a fixed 64-byte layout:Byte OffsetField DescriptionType / Scale0x00 - 0x03Unique Device Headeruint32_t (e.g., 0xA0A0A0A0)0x04 - 0x07Payload CRC32 Checksumuint32_t0x08 - 0x09Oil Temperatureint16_t ($\times 100$)0x0A - 0x0BWinding Temperatureint16_t ($\times 100$)0x0C - 0x0DTank Surface Temperatureint16_t ($\times 100$)0x0E - 0x0FAmbient Temperatureint16_t ($\times 100$)0x10 - 0x13Stage A / B Discharge Temps$2 \times \text{int16\_t}$ ($\times 100$)0x14 - 0x17Stage A / B Discharge Pressures$2 \times \text{int16\_t}$ ($\times 100$)0x18 - 0x1D3-Phase AC Voltages$3 \times \text{int16\_t}$ ($\times 100$)0x1E - 0x233-Phase AC Current (RMS)$3 \times \text{int16\_t}$ ($\times 100$)0x24 - 0x29Real / Reactive / Apparent Power$3 \times \text{int16\_t}$ ($\times 100$)0x2A - 0x2BPower Factorint16_t ($\times 100$)Fault Value: Values set to -32768 (0x8000) indicate a disconnected or faulty sensor state.🛠 Installation & Setup1. ESP32 Firmware SetupOpen PlatformIO or Arduino IDE.Install necessary dependencies:Adafruit ADS1X15RTClibETH & AsyncUDPCompile and flash cpu2_extension.ino to the secondary ESP32 node.Compile and flash traxcode_18.ino to the primary ESP32-S3 module.2. Python Test Center SetupEnsure Python 3.9+ is installed.Install runtime dependencies:pip install pyserial scapy
+Run the desktop application:python main.py
+👤 AuthorDesigned and Built by Ubamadu PossibleEmbedded Systems & Industrial Control Infrastructure Specialist
